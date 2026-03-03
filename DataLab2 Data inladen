@@ -1,0 +1,34 @@
+import kagglehub
+import pandas as pd
+import sqlite3
+import os
+
+# 1. Download alleen de dataset (dit haalt hem op en geeft het map-pad terug)
+dataset_path = kagglehub.dataset_download("hugomathien/soccer")
+print(f"Dataset map: {dataset_path}")
+
+# 2. Maak het volledige pad naar het database bestand
+db_path = os.path.join(dataset_path, "database.sqlite")
+
+# 3. Controleer de bestandsgrootte (Een gezonde database is hier rond de 300+ MB)
+bestandsgrootte_mb = os.path.getsize(db_path) / (1024 * 1024)
+print(f"Grootte van database.sqlite: {bestandsgrootte_mb:.2f} MB\n")
+
+# 4. Probeer de data in te laden
+try:
+    # Maak verbinding via de ingebouwde sqlite3 bibliotheek
+    conn = sqlite3.connect(db_path)
+    
+    # Haal de data op
+    query = "SELECT * FROM Player"
+    df = pd.read_sql_query(query, conn)
+    
+    print("Het is gelukt! Hier zijn de eerste 5 records:")
+    print(df.head())
+
+except Exception as e:
+    print(f"Fout bij het inlezen: {e}")
+finally:
+    # Zorg dat de databaseverbinding altijd netjes sluit
+    if 'conn' in locals():
+        conn.close()
