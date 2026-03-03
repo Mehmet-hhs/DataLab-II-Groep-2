@@ -32,3 +32,93 @@ finally:
     # Zorg dat de databaseverbinding altijd netjes sluit
     if 'conn' in locals():
         conn.close()
+
+print("\n" * 5) # Voegt 5 lege regels toe je kan ook dit weghalen en hierna een nieuwe stuk code aanmaken in je notebook
+
+import sqlite3
+import pandas as pd
+
+# 1. Zet een 'r' voor de string, 2. gebruik aanhalingstekens, 3. voeg \database.sqlite toe
+bestandspad = r"C:\Users\hooge\.cache\kagglehub\datasets\hugomathien\soccer\versions\10\database.sqlite" #voeg hier de file path toe van de hiervoor uitgevoerde code
+
+# Maak verbinding met de database
+conn = sqlite3.connect(bestandspad)
+
+# Query om alle tabelnamen op te halen
+query_tabellen = "SELECT name FROM sqlite_master WHERE type='table';"
+df_tabellen = pd.read_sql_query(query_tabellen, conn)
+
+print("Dit zijn de tabellen in de database:")
+print(df_tabellen)
+
+print("\n" * 5) # Voegt 5 lege regels toe je kan ook dit weghalen en hierna een nieuwe stuk code aanmaken in je notebook
+
+# Zoek in de Team tabel naar clubs waar 'AZ' in de naam voorkomt
+query_az = "SELECT * FROM Team WHERE team_long_name LIKE '%AZ%';"
+df_az = pd.read_sql_query(query_az, conn)
+
+print(df_az)
+
+print("\n" * 5) # Voegt 5 lege regels toe je kan ook dit weghalen en hierna een nieuwe stuk code aanmaken in je notebook
+
+# Query om alle wedstrijden uit de Eredivisie te halen voor een specifiek seizoen
+query_eredivisie = """
+SELECT 
+    Match.date,
+    Match.season,
+    HT.team_long_name AS thuisteam,
+    AT.team_long_name AS uitteam,
+    Match.home_team_goal AS thuis_doelpunten,
+    Match.away_team_goal AS uit_doelpunten
+FROM Match
+JOIN League ON Match.league_id = League.id
+JOIN Country ON League.country_id = Country.id
+JOIN Team AS HT ON Match.home_team_api_id = HT.team_api_id
+JOIN Team AS AT ON Match.away_team_api_id = AT.team_api_id
+WHERE Country.name = 'Netherlands' AND Match.season = '2015/2016' 
+ORDER BY Match.date;
+"""
+#pas '2015/2016' aan als we een ander seizoen willen!
+
+# Voer de query uit en sla op in een DataFrame
+df_eredivisie = pd.read_sql_query(query_eredivisie, conn)
+
+print("Eerste 5 wedstrijden van dit seizoen:")
+print(df_eredivisie.head())
+
+print("\n" * 5) # Voegt 5 lege regels toe je kan ook dit weghalen en hierna een nieuwe stuk code aanmaken in je notebook
+
+import numpy as np
+
+# 1. Bepaal wie de wedstrijd wint en deel de punten uit
+condities = [
+    df_eredivisie['thuis_doelpunten'] > df_eredivisie['uit_doelpunten'],  # Thuisteam wint
+    df_eredivisie['thuis_doelpunten'] == df_eredivisie['uit_doelpunten']  # Gelijkspel
+]
+
+# Punten voor thuisploeg: 3 bij winst, 1 bij gelijkspel, anders 0
+df_eredivisie['punten_thuis'] = np.select(condities, [3, 1], default=0)
+
+# Punten voor uitploeg: 0 bij verlies, 1 bij gelijkspel, anders 3
+df_eredivisie['punten_uit'] = np.select(condities, [0, 1], default=3)
+
+# 2. Verzamel alle behaalde thuispunten per team
+thuis_tabel = df_eredivisie.groupby('thuisteam')['punten_thuis'].sum().reset_index()
+thuis_tabel.columns = ['Team', 'Punten'] # Kolomnamen netjes maken
+
+# 3. Verzamel alle behaalde uitpunten per team
+uit_tabel = df_eredivisie.groupby('uitteam')['punten_uit'].sum().reset_index()
+uit_tabel.columns = ['Team', 'Punten']
+
+# 4. Voeg thuis en uit samen, tel het totaal op en maak de ranglijst
+alle_punten = pd.concat([thuis_tabel, uit_tabel])
+eindstand = alle_punten.groupby('Team')['Punten'].sum().reset_index()
+
+# Sorteer van meeste naar minste punten
+eindstand = eindstand.sort_values(by='Punten', ascending=False).reset_index(drop=True)
+
+# Visueel trucje: laat de lijst bij 1 beginnen (positie 1) in plaats van 0
+eindstand.index = eindstand.index + 1
+
+print("Eindstand Eredivisie Seizoen 2015/2016:")
+print(eindstand)
